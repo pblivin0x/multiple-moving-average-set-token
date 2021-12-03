@@ -9,10 +9,10 @@ import { Math } from "@openzeppelin/contracts/math/Math.sol";
 import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/SafeCast.sol";
 
-import { BaseExtension } from "../lib/BaseExtension.sol";
-import { IBaseManager } from "../interfaces/IBaseManager.sol";
-import { ISetToken } from "../interfaces/ISetToken.sol";
-import { PreciseUnitMath } from "../lib/PreciseUnitMath.sol";
+import { BaseExtension } from "@setprotocol/index-coop-contracts/contracts/lib/BaseExtension.sol";
+import { IBaseManager } from "@setprotocol/index-coop-contracts/contracts/interfaces/IBaseManager.sol";
+import { ISetToken } from "@setprotocol/index-coop-contracts/contracts/interfaces/ISetToken.sol";
+import { PreciseUnitMath } from "@setprotocol/index-coop-contracts/contracts/lib/PreciseUnitMath.sol";
 
 /**
  * @title MultipleMovingAverageStrategyExtension

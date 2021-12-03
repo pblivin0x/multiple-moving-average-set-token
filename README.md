@@ -2,6 +2,18 @@
 
 Utilize [Set Protocol V2](https://docs.tokensets.com/) to tokenize a multiple moving average trading strategy managed by smart contracts. 
 
+## Installing Dependencies
+
+### Node
+
+```bash
+npm install @openzeppelin/contracts@3.1.0
+```
+
+```bash
+npm install @setprotocol/index-coop-contracts
+```
+
 ## Strategy Description 
 
 ### Indicator
