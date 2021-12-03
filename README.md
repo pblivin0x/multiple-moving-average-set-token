@@ -1,0 +1,1 @@
+# multiple-moving-average-set-token
