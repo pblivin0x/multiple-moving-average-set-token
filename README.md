@@ -11,6 +11,10 @@ npm install @openzeppelin/contracts@3.1.0
 ```
 
 ```bash
+npm install @setprotocol/set-protocol-v2
+```
+
+```bash
 npm install @setprotocol/index-coop-contracts
 ```
 
@@ -36,6 +40,12 @@ The uncertain case, when the groups of moving averages overlap, can be considere
 With a risk-on asset (ex: $ETH) and a risk-off asset (ex: $cUSDC) a strategy could be constructed as follows
 - hold $ETH when MMA($ETHUSDC) is bullish
 - hold $cUSDC when MMA($ETHUSDC) is bearish or uncertain
+
+### Future Steps
+
+- Implement Moving Average Oracle - need time series feed and moving average transformation
+- Place trades efficiently
+- Add AAVE lending (wrapping)
 
 ## Acknowledgements
 * [Set Protocol V2](https://docs.tokensets.com/)
