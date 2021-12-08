@@ -2,6 +2,7 @@
   "dependencies": {
     "@openzeppelin/contracts": "^3.1.0",
     "@setprotocol/index-coop-contracts": "^0.0.29",
-    "@setprotocol/set-protocol-v2": "^0.1.5"
+    "@setprotocol/set-protocol-v2": "^0.1.5",
+    "@uniswap/v3-core": "^1.0.0"
   }
 }

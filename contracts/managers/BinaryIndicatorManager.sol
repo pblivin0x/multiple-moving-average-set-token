@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache License, Version 2.0
+// Inspired by https://github.com/SetProtocol/index-coop-smart-contracts/blob/master/contracts/manager/ICManager.sol
 
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
@@ -16,7 +17,10 @@ import { IStreamingFeeModule } from "@setprotocol/index-coop-contracts/contracts
 import { ITradeModule } from "../interfaces/ITradeModule.sol";
 import { ITrigger } from "../interfaces/ITrigger.sol";
 
-contract MultipleMovingAverageManager is MutualUpgrade {
+/// @title Binary Indicator Manager 
+/// @author pblivin0x
+/// @notice Allocates Set Token between a risk-on asset and risk-off asset based on the signals of a trigger.
+contract BinaryIndicatorManager is MutualUpgrade {
     using Address for address;
     using SafeMath for uint256;
     using PreciseUnitMath for uint256;
@@ -24,34 +28,59 @@ contract MultipleMovingAverageManager is MutualUpgrade {
 
     /* ============ Events ============ */
 
+    /// @notice Emitted when streaming fees are accrued
+    /// @param _totalFees         Total fees accrued
+    /// @param _operatorTake      Operator take of the total fees
+    /// @param _methodologistTake Methodologist take of the total fees
     event FeesAccrued(
         uint256 _totalFees,
         uint256 _operatorTake,
         uint256 _methodologistTake
     );
 
+    /// @notice Emitted when the methodologist is changed
+    /// @param _oldMethodologist Address of the old methodologist
+    /// @param _newMethodologist Address of the new methodologistß
     event MethodologistChanged(
         address _oldMethodologist,
         address _newMethodologist
     );
 
+    /// @notice Emitted when the operator is changed
+    /// @param _oldOperator Address of the old manager
+    /// @param _newOperator Address of the new manager
     event OperatorChanged(
         address _oldOperator,
         address _newOperator
     );
 
+    /// @notice Emitted when rebalance is called and the target allocation based on the trigger changes
+    /// @param _wasBullish Boolean to indicate whether previous status was bullish (risk-on) or bearish (risk-off)
+    /// @param _wasBullish Boolean to indicate whether new status is bullish (risk-on) or bearish (risk-off)
     event RiskStatusChanged(
         bool _wasBullish,
         bool _nowBullish
     );
 
+    /// @notice Emitted when rebalance is called but the target allocation based on the trigger remains the same
+    /// @param _isBullish Boolean to indicate whether the unchanged status is bullish (risk-on) or bearish (risk-off)
+    event RiskStatusUnchanged(
+        bool _isBullish
+    );
+
     /* ============ Modifiers ============ */
 
+    /**
+     * Throws if the sender is not the SetToken operator
+     */
     modifier onlyOperator() {
         require(msg.sender == operator, "Must be operator");
         _;
     }
 
+    /**
+     * Throws if the sender is not the SetToken methodologist
+     */
     modifier onlyMethodologist() {
         require(msg.sender == methodologist, "Must be methodologist");
         _;
@@ -59,28 +88,51 @@ contract MultipleMovingAverageManager is MutualUpgrade {
 
     /* ============ State Variables ============ */
 
+    // Address of the Set Token
     ISetToken public setToken;
 
+    // Address of the Set Protocol TradeModule
     ITradeModule public tradeModule;
 
+    // Address of the Set Protocol StreamingFeeModule
     IStreamingFeeModule public feeModule;
 
+    // Address of the binary trigger contract to determine bullish/bearish signal
     ITrigger public trigger;
 
+    // Address of operator which typically executes manager only functions on Set Protocol modules
     address public operator;
 
+    // Address of methodologist which serves as manager of streaming fees
     address public methodologist;
 
+    // Percent in 1e18 of streaming fees sent to operator
     uint256 public operatorFeeSplit;
 
+    // Address of the component to allocate to when bullish (risk-on)
     address public riskOnComponent;
 
+    // Address of the component to allocate to when bearish (risk-off)
     address public riskOffComponent;
 
+    // Status of the binary indicator based on the trigger
     bool public isBullish;
 
     /* ============ Constructor ============ */
 
+    /**
+     * @notice Initialize new BinaryIndicatorManager instance
+     * @param _setToken         Address of the Set Token
+     * @param _tradeModule      Address of the Set Protocol TradeModule
+     * @param _feeModule        Address of the Set Protocol StreamingFeeModule
+     * @param _trigger          Address of the binary trigger contract to determine bullish/bearish signal
+     * @param _operator         Address of operator which typically executes manager only functions on Set Protocol modules
+     * @param _methodologist    Address of methodologist which serves as manager of streaming fees
+     * @param _operatorFeeSplit Percent in 1e18 of streaming fees sent to operator
+     * @param _riskOnComponent  Address of the component to allocate to when bullish (risk-on)
+     * @param _riskOffComponent Address of the component to allocate to when bearish (risk-off)
+     * @param _isBullish        Initial status of binary indicator
+     */
     constructor(
         ISetToken _setToken,
         ITradeModule _tradeModule,
@@ -124,6 +176,9 @@ contract MultipleMovingAverageManager is MutualUpgrade {
 
     /* ============ External Functions ============ */
 
+    /**
+     * Accrue fees from streaming fee module and transfer tokens to operator / methodologist addresses based on fee split
+     */
     function accrueFeeAndDistribute() public {
         feeModule.accrueFee(setToken);
 
@@ -139,19 +194,40 @@ contract MultipleMovingAverageManager is MutualUpgrade {
         emit FeesAccrued(setTokenBalance, operatorTake, methodologistTake);
     }
     
+    /**
+     * OPERATOR OR METHODOLOGIST ONLY: Update the SetToken manager address. Operator and Methodologist must each call
+     * this function to execute the update.
+     *
+     * @param _newManager           New manager address
+     */
     function updateManager(address _newManager) external mutualUpgrade(operator, methodologist) {
         require(_newManager != address(0), "Zero address not valid");
         setToken.setManager(_newManager);
     }
 
+    /**
+     * OPERATOR ONLY: Add a new module to the SetToken.
+     *
+     * @param _module           New module to add
+     */
     function addModule(address _module) external onlyOperator {
         setToken.addModule(_module);
     }
 
+    /**
+     * OPERATOR ONLY: Remove a new module from the SetToken.
+     *
+     * @param _module           Module to remove
+     */
     function removeModule(address _module) external onlyOperator {
         setToken.removeModule(_module);
     }
 
+    /**
+     * @notice Rebalance set token allocation based on signal from trigger
+     * @param _exchangeName           Human readable name of the exchange in the integrations registry
+     * @param _data                   Arbitrary bytes to be used to construct trade call data
+     */
     function rebalance(
         string memory _exchangeName,
         bytes memory _data
@@ -166,6 +242,7 @@ contract MultipleMovingAverageManager is MutualUpgrade {
             _trade(_exchangeName, riskOnComponent, sendUnits, riskOffComponent, 0, _data);
             emit RiskStatusChanged(isBullish, updateIsBullish);
             isBullish = updateIsBullish;
+
         } else if (!isBullish && updateIsBullish) { 
             
             // Switch to bullish allocation
@@ -173,17 +250,40 @@ contract MultipleMovingAverageManager is MutualUpgrade {
             _trade(_exchangeName, riskOffComponent, sendUnits, riskOnComponent, 0, _data);
             emit RiskStatusChanged(isBullish, updateIsBullish);
             isBullish = updateIsBullish;
-        } 
+
+        } else {
+
+            // Trigger same as last rebalance, no trade takes place
+            emit RiskStatusUnchanged(isBullish);
+        }
     }
 
+    /**
+     * METHODOLOGIST ONLY: Update the streaming fee for the SetToken. Subject to timelock period agreed upon by the
+     * operator and methodologist
+     *
+     * @param _newFee           New streaming fee percentage
+     */
     function updateStreamingFee(uint256 _newFee) external onlyMethodologist {
         feeModule.updateStreamingFee(setToken, _newFee);
     }
 
+    /**
+     * OPERATOR OR METHODOLOGIST ONLY: Update the fee recipient address. Operator and Methodologist must each call
+     * this function to execute the update.
+     *
+     * @param _newFeeRecipient           New fee recipient address
+     */
     function updateFeeRecipient(address _newFeeRecipient) external mutualUpgrade(operator, methodologist) {
         feeModule.updateFeeRecipient(setToken, _newFeeRecipient);
     }
 
+    /**
+     * OPERATOR OR METHODOLOGIST ONLY: Update the fee split percentage. Operator and Methodologist must each call
+     * this function to execute the update.
+     *
+     * @param _newFeeSplit           New fee split percentage
+     */
     function updateFeeSplit(uint256 _newFeeSplit) external mutualUpgrade(operator, methodologist) {
         require(
             _newFeeSplit <= PreciseUnitMath.preciseUnit(),
@@ -195,19 +295,39 @@ contract MultipleMovingAverageManager is MutualUpgrade {
         operatorFeeSplit = _newFeeSplit;
     }
 
+    /**
+     * OPERATOR ONLY: Update the trade module address
+     *
+     * @param _newTradeModule           New trade module address
+     */
     function updateTradeModule(ITradeModule _newTradeModule) external onlyOperator {
         tradeModule = _newTradeModule;
     }
 
+    /**
+     * OPERATOR ONLY: Update the streaming fee module address
+     *
+     * @param _newStreamingFeeModule           New streaming fee module address
+     */
     function updateStreamingFeeModule(IStreamingFeeModule _newStreamingFeeModule) external onlyOperator {
         feeModule = _newStreamingFeeModule;
     }
 
+    /**
+     * METHODOLOGIST ONLY: Update the methodologist address
+     *
+     * @param _newMethodologist           New methodologist address
+     */
     function updateMethodologist(address _newMethodologist) external onlyMethodologist {
         emit MethodologistChanged(methodologist, _newMethodologist);
         methodologist = _newMethodologist;
     }
 
+    /**
+     * OPERATOR ONLY: Update the operator address
+     *
+     * @param _newOperator           New operator address
+     */
     function updateOperator(address _newOperator) external onlyOperator {
         emit OperatorChanged(operator, _newOperator);
         operator = _newOperator;
