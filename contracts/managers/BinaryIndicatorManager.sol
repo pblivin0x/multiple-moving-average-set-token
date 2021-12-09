@@ -380,7 +380,7 @@ contract BinaryIndicatorManager is MutualUpgrade {
     /**
      * @notice Get current status of binary indicator
      */
-    function getBinaryIndicator() 
+    function getIndicator() 
         public
         view
         returns (bool)
@@ -391,7 +391,7 @@ contract BinaryIndicatorManager is MutualUpgrade {
     /**
      * @notice Check if current status of binary indicator is different than last rebalance 
      */
-    function getBinaryIndicatorIsChanged() 
+    function getIndicatorIsChanged() 
         public
         view
         returns (bool)

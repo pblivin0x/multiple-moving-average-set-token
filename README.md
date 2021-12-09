@@ -1,6 +1,6 @@
 # Multiple Moving Average Set Token
 
-Utilize [Set Protocol V2](https://docs.tokensets.com/) and [Uniswap V3 oracles](https://docs.uniswap.org/protocol/concepts/V3-overview/oracle) to tokenize a smart contract managed multiple moving average crossover trading strategy.
+Tokenize a smart contract managed multiple moving average crossover trading strategy with [Set Protocol V2](https://docs.tokensets.com/) and [Uniswap V3 oracles](https://docs.uniswap.org/protocol/concepts/V3-overview/oracle). 
 
 ## Installing Dependencies
 
@@ -28,11 +28,13 @@ npm install @uniswap/v3-core
 
 ![](diagrams/indicatorTradingArchitecture.png)
 
+The `Indicator` contract utilizes a `Uniswap V3 Pool` as an on-chain oracle. 
+
 The `Manager` contract has two key functions for the `Keeper`
-- `getBinaryIndicatorIsChanged()`, which can be called for free and checks if the `Indicator` signal has changed since the last rebalance
+- `getIndicatorIsChanged()`, which can be called for free and checks if the `Indicator` signal has changed since the last rebalance
 - `rebalance()`, which can only be called by the `Keeper` and utilizes the `Trade Module` to change the allocation of the `Set Token`
 
-The `Keeper` can be set to periodically call `getBinaryIndicatorIsChanged()` for free, and subsequently call `rebalance()` if the indicator signal has changed. 
+The `Keeper` can be set to periodically call `getIndicatorIsChanged()` for free, and subsequently call `rebalance()` if the indicator signal has changed. 
 
 ### Multiple Moving Average Crossover Indicator
 
