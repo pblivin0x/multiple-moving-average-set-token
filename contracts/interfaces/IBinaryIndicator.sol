@@ -4,9 +4,9 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-/// @title ITrigger
-/// @notice Interface for interacting with Trigger contracts
-interface ITrigger {
+/// @title IBinaryIndicator
+/// @notice Interface for interacting with Binary Indicator contracts
+interface IBinaryIndicator {
 
     /// @notice Returns bool indicating if indicator is bullish 
     /// @return Boolean to represent if indicator is bullish

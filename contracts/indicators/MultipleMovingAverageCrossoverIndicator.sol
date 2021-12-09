@@ -6,7 +6,7 @@ pragma experimental "ABIEncoderV2";
 import { IUniswapV3Pool } from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
 /**
- * @title   Multiple Moving Average Crossover Trigger
+ * @title   Multiple Moving Average Crossover Indicator
  * @author  pblivin0x
  * @notice  Consider two groups of moving averages: 
  *          S, a group of n short term moving averages and L, a group of m long term moving averages. 
@@ -20,9 +20,12 @@ import { IUniswapV3Pool } from "@uniswap/v3-core/contracts/interfaces/IUniswapV3
  *          - uncertain otherwise
  *
  *          The uncertain case, when the short term and long term groups of moving averages overlap, 
- *          can be considered either bullish (risk-on) or bearish (risk-off) depending on manager preference.           
+ *          can be considered either bullish (risk-on) or bearish (risk-off) depending on manager preference.       
+ *
+ *          This indicator uses arithmetic mean ticks from Uniswap V3 pools acting as on-chain oracles  
+ *          https://docs.uniswap.org/protocol/concepts/V3-overview/oracle
  */
-contract MultipleMovingAverageCrossoverTrigger  
+contract MultipleMovingAverageCrossoverIndicator
 {
     /* ============ State Variables ============ */
 
@@ -33,10 +36,10 @@ contract MultipleMovingAverageCrossoverTrigger
     bool public uncertainIsBullish;
 
     // Number of moving average time periods supplied in the long group
-    uint public m;
+    uint public numLongTimePeriods;
 
     // Number of moving average time periods supplied in the short group
-    uint public n;
+    uint public numShortTimePeriods;
 
     // Full list of moving averages time periods: [L1, L2, ..., Lm, S1, S2, ..., Sn, 0]
     uint32[] public movingAverageTimePeriods;
@@ -62,14 +65,14 @@ contract MultipleMovingAverageCrossoverTrigger
         uncertainIsBullish = _uncertainIsBullish;
 
         // Store number of moving averages in each group
-        m = _longTermTimePeriods.length;
-        n = _shortTermTimePeriods.length;
+        numLongTimePeriods = _longTermTimePeriods.length;
+        numShortTimePeriods = _shortTermTimePeriods.length;
 
         // Collect all moving average durations and 0 in one array for UniswapV3 pool call
-        for (uint i=0; i<m; i++) {
+        for (uint i=0; i<numLongTimePeriods; i++) {
             movingAverageTimePeriods.push(_longTermTimePeriods[i]);
         }
-        for (uint j=0; j<n; j++) {
+        for (uint j=0; j<numShortTimePeriods; j++) {
             movingAverageTimePeriods.push(_shortTermTimePeriods[j]);
         }
         movingAverageTimePeriods.push(0);
@@ -91,12 +94,12 @@ contract MultipleMovingAverageCrossoverTrigger
         // Gather cumulative tick values as of each `secondsAgos` from the current block timestamp 
         (int56[] memory tickCumulatives, ) = pool.observe(movingAverageTimePeriods);
 
-        // Get minimum and maximum moving average from the long group
-        int24 minLongMovingAverage = _getTwap(tickCumulatives[0], tickCumulatives[m+n], movingAverageTimePeriods[0]);
+        // Get minimum and maximum arithmetic mean tick from the long group
+        int24 minLongMovingAverage = _getArithmeticMeanTick(tickCumulatives[0], tickCumulatives[numLongTimePeriods+numShortTimePeriods], movingAverageTimePeriods[0]);
         int24 maxLongMovingAverage = minLongMovingAverage;
-        for (uint i=1; i<m; i++) 
+        for (uint i=1; i<numLongTimePeriods; i++) 
         {
-            int24 longMovingAverage = _getTwap(tickCumulatives[i], tickCumulatives[m+n], movingAverageTimePeriods[i]);
+            int24 longMovingAverage = _getArithmeticMeanTick(tickCumulatives[i], tickCumulatives[numLongTimePeriods+numShortTimePeriods], movingAverageTimePeriods[i]);
             if (longMovingAverage < minLongMovingAverage) {
                 minLongMovingAverage = longMovingAverage;
             }
@@ -105,12 +108,12 @@ contract MultipleMovingAverageCrossoverTrigger
             }
         }
 
-        // Get minimum and maximum moving average from the short group
-        int24 minShortMovingAverage = _getTwap(tickCumulatives[m], tickCumulatives[m+n], movingAverageTimePeriods[m]);
+        // Get minimum and maximum arithmetic mean tick from the short group
+        int24 minShortMovingAverage = _getArithmeticMeanTick(tickCumulatives[numLongTimePeriods], tickCumulatives[numLongTimePeriods+numShortTimePeriods], movingAverageTimePeriods[numLongTimePeriods]);
         int24 maxShortMovingAverage = minShortMovingAverage;
-        for (uint j=m+1; j<m+n; j++) 
+        for (uint j=numLongTimePeriods+1; j<numLongTimePeriods+numShortTimePeriods; j++) 
         {
-            int24 shortMovingAverage = _getTwap(tickCumulatives[j], tickCumulatives[m+n], movingAverageTimePeriods[j]);
+            int24 shortMovingAverage = _getArithmeticMeanTick(tickCumulatives[j], tickCumulatives[numLongTimePeriods+numShortTimePeriods], movingAverageTimePeriods[j]);
             if (shortMovingAverage < minShortMovingAverage) {
                 minShortMovingAverage = shortMovingAverage;
             }
@@ -119,7 +122,7 @@ contract MultipleMovingAverageCrossoverTrigger
             }
         }
 
-        // Compare and determine signal
+        // Compare short term and long term moving average groups and determine signal
         if (minShortMovingAverage > maxLongMovingAverage) {
             return true;
         } else if (maxShortMovingAverage < minLongMovingAverage) {
@@ -138,7 +141,7 @@ contract MultipleMovingAverageCrossoverTrigger
      * @param _duration                  Seconds ago from current block timestamp of _historicalTickCumulative
      * @return Time-weighted average price in ticks
      */
-    function _getTwap(
+    function _getArithmeticMeanTick(
         int56 _historicalTickCumulative,
         int56 _newTickCumulative,
         uint32 _duration

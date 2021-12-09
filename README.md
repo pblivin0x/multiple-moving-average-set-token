@@ -22,9 +22,19 @@ npm install @setprotocol/index-coop-contracts
 npm install @uniswap/v3-core
 ```
 
-## Strategy Description 
+## Implementation Details
 
-### Indicator
+### Contract Architecture
+
+![](diagrams/indicatorTradingArchitecture.png)
+
+The `Manager` contract has two key functions for the `Keeper`
+- `getBinaryIndicatorIsChanged()`, which can be called for free and checks if the `Indicator` signal has changed since the last rebalance
+- `rebalance()`, which can only be called by the `Keeper` and utilizes the `Trade Module` to change the allocation of the `Set Token`
+
+The `Keeper` can be set to periodically call `getBinaryIndicatorIsChanged()` for free, and subsequently call `rebalance()` if the indicator signal has changed. 
+
+### Multiple Moving Average Crossover Indicator
 
 Consider two groups of moving averages: S, a group of n short term moving averages and L, a group of m long term moving averages. 
 
@@ -39,17 +49,21 @@ An indicator MMA() can be constructed as follows
 
 The uncertain case, when the short term and long term groups of moving averages overlap, can be considered either bullish (risk-on) or bearish (risk-off) depending on manager preference. 
 
-### Two Assets Strategy
+### Uniswap V3 Oracles
 
-With a risk-on asset (ex: $ETH) and a risk-off asset (ex: $USDC) a strategy could be constructed as follows
-- hold $ETH when MMA($ETHUSDC) is bullish
-- hold $USDC when MMA($ETHUSDC) is bearish or uncertain
+This indicator uses a Uniswap V3 pool as on-chain oracle by deriving the arithmetic mean tick over an interval and using that as a moving average. The arithmetic mean tick over a given interval is derived with values stored in the [tick accumulator](https://docs.uniswap.org/protocol/concepts/V3-overview/oracle#tick-accumulator).  
 
-## Future Steps
+### Trading Strategy
 
-- Place trades efficiently
-- Gas optimization in trigger
-- Add AAVE lending (wrapping)
+With a risk-on asset (ex: $ETH) and a risk-off asset (ex: $USDC) the trading strategy is as follows
+- hold $ETH when MMA() using the Uniswap V3 ETHUSDC pool is bullish
+- hold $USDC when MMA() using the Uniswap V3 ETHUSDC pool is bearish or uncertain
+
+## Future Work
+
+- Place calls to tradeModule in a more optimal way (reduce slippage)
+- Gas optimization in indicator
+- Add Aave/Compound lending (wrapModule) to manager
 
 ## Acknowledgements
 * [Set Protocol V2](https://docs.tokensets.com/): [[GitHub](https://github.com/SetProtocol/set-protocol-v2)]

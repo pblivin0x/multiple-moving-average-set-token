@@ -6,6 +6,7 @@ pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
 import { ISetToken } from "@setprotocol/index-coop-contracts/contracts/interfaces/ISetToken.sol";
+
 import { IExchangeAdapter } from "@setprotocol/set-protocol-v2/contracts/interfaces/IExchangeAdapter.sol";
 
 /// @title Trade Module interface for Set Protocol's TradeModule

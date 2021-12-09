@@ -9,17 +9,16 @@ import { SafeCast } from "@openzeppelin/contracts/utils/SafeCast.sol";
 import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
 
 import { ISetToken } from "@setprotocol/index-coop-contracts/contracts/interfaces/ISetToken.sol";
+import { IStreamingFeeModule } from "@setprotocol/index-coop-contracts/contracts/interfaces/IStreamingFeeModule.sol";
+import { MutualUpgrade } from "@setprotocol/index-coop-contracts/contracts/lib/MutualUpgrade.sol";
 import { PreciseUnitMath } from "@setprotocol/index-coop-contracts/contracts/lib/PreciseUnitMath.sol";
 
-import { MutualUpgrade } from "@setprotocol/index-coop-contracts/contracts/lib/MutualUpgrade.sol";
-import { IStreamingFeeModule } from "@setprotocol/index-coop-contracts/contracts/interfaces/IStreamingFeeModule.sol";
-
 import { ITradeModule } from "../interfaces/ITradeModule.sol";
-import { ITrigger } from "../interfaces/ITrigger.sol";
+import { IBinaryIndicator } from "../interfaces/IBinaryIndicator.sol";
 
 /// @title Binary Indicator Manager 
 /// @author pblivin0x
-/// @notice Allocates Set Token between a risk-on asset and risk-off asset based on the signals of a trigger.
+/// @notice Allocates Set Token between a risk-on asset and risk-off asset based on the signals of a binary indicator.
 contract BinaryIndicatorManager is MutualUpgrade {
     using Address for address;
     using SafeMath for uint256;
@@ -54,6 +53,14 @@ contract BinaryIndicatorManager is MutualUpgrade {
         address _newOperator
     );
 
+    /// @notice Emitted when the keeper is changed
+    /// @param _oldKeeper Address of the old keeper
+    /// @param _newKeeper Address of the new keeper
+    event KeeperChanged(
+        address _oldKeeper,
+        address _newKeeper
+    );
+
     /// @notice Emitted when rebalance is called and the target allocation based on the trigger changes
     /// @param _wasBullish Boolean to indicate whether previous status was bullish (risk-on) or bearish (risk-off)
     /// @param _wasBullish Boolean to indicate whether new status is bullish (risk-on) or bearish (risk-off)
@@ -86,6 +93,14 @@ contract BinaryIndicatorManager is MutualUpgrade {
         _;
     }
 
+    /**
+     * Throws if the sender is not the SetToken keeper
+     */
+    modifier onlyKeeper() {
+        require(msg.sender == keeper, "Must be keeper");
+        _;
+    }
+
     /* ============ State Variables ============ */
 
     // Address of the Set Token
@@ -97,8 +112,8 @@ contract BinaryIndicatorManager is MutualUpgrade {
     // Address of the Set Protocol StreamingFeeModule
     IStreamingFeeModule public feeModule;
 
-    // Address of the binary trigger contract to determine bullish/bearish signal
-    ITrigger public trigger;
+    // Address of the binary indicator contract to determine bullish/bearish signal
+    IBinaryIndicator public binaryIndicator;
 
     // Address of operator which typically executes manager only functions on Set Protocol modules
     address public operator;
@@ -109,13 +124,16 @@ contract BinaryIndicatorManager is MutualUpgrade {
     // Percent in 1e18 of streaming fees sent to operator
     uint256 public operatorFeeSplit;
 
+    // Address of keeper which calls rebalance function when indicator status changes
+    address public keeper;
+
     // Address of the component to allocate to when bullish (risk-on)
     address public riskOnComponent;
 
     // Address of the component to allocate to when bearish (risk-off)
     address public riskOffComponent;
 
-    // Status of the binary indicator based on the trigger
+    // Status of the binary indicator, updated every rebalance
     bool public isBullish;
 
     /* ============ Constructor ============ */
@@ -125,10 +143,11 @@ contract BinaryIndicatorManager is MutualUpgrade {
      * @param _setToken         Address of the Set Token
      * @param _tradeModule      Address of the Set Protocol TradeModule
      * @param _feeModule        Address of the Set Protocol StreamingFeeModule
-     * @param _trigger          Address of the binary trigger contract to determine bullish/bearish signal
+     * @param _binaryIndicator  Address of the binary indicator contract to determine bullish/bearish signal
      * @param _operator         Address of operator which typically executes manager only functions on Set Protocol modules
      * @param _methodologist    Address of methodologist which serves as manager of streaming fees
      * @param _operatorFeeSplit Percent in 1e18 of streaming fees sent to operator
+     * @param _keeper           Address of keeper which calls rebalance function when indicator status changes
      * @param _riskOnComponent  Address of the component to allocate to when bullish (risk-on)
      * @param _riskOffComponent Address of the component to allocate to when bearish (risk-off)
      * @param _isBullish        Initial status of binary indicator
@@ -137,10 +156,11 @@ contract BinaryIndicatorManager is MutualUpgrade {
         ISetToken _setToken,
         ITradeModule _tradeModule,
         IStreamingFeeModule _feeModule,
-        ITrigger _trigger,
+        IBinaryIndicator _binaryIndicator,
         address _operator,
         address _methodologist,
         uint256 _operatorFeeSplit,
+        address _keeper,
         address _riskOnComponent,
         address _riskOffComponent,
         bool _isBullish
@@ -165,10 +185,11 @@ contract BinaryIndicatorManager is MutualUpgrade {
         setToken = _setToken;
         tradeModule = _tradeModule;
         feeModule = _feeModule;
-        trigger = _trigger;
+        binaryIndicator = _binaryIndicator;
         operator = _operator;
         methodologist = _methodologist;
         operatorFeeSplit = _operatorFeeSplit;
+        keeper = _keeper;
         riskOnComponent = _riskOnComponent;
         riskOffComponent = _riskOffComponent;
         isBullish = _isBullish;
@@ -224,16 +245,18 @@ contract BinaryIndicatorManager is MutualUpgrade {
     }
 
     /**
-     * @notice Rebalance set token allocation based on signal from trigger
+     * @notice Rebalance set token allocation based on signal from binary indicator
      * @param _exchangeName           Human readable name of the exchange in the integrations registry
      * @param _data                   Arbitrary bytes to be used to construct trade call data
      */
     function rebalance(
         string memory _exchangeName,
         bytes memory _data
-    ) public {
-
-        bool updateIsBullish = trigger.isBullish();
+    ) 
+        external 
+        onlyKeeper 
+    {
+        bool updateIsBullish = binaryIndicator.isBullish();
 
         if (isBullish && !updateIsBullish) { 
             
@@ -314,6 +337,15 @@ contract BinaryIndicatorManager is MutualUpgrade {
     }
 
     /**
+     * OPERATOR ONLY: Update the binary indicator address
+     *
+     * @param _newBinaryIndicator           New binary indicator address
+     */
+    function updateBinaryIndicator(IBinaryIndicator _newBinaryIndicator) external onlyOperator {
+        binaryIndicator = _newBinaryIndicator;
+    }
+
+    /**
      * METHODOLOGIST ONLY: Update the methodologist address
      *
      * @param _newMethodologist           New methodologist address
@@ -331,6 +363,40 @@ contract BinaryIndicatorManager is MutualUpgrade {
     function updateOperator(address _newOperator) external onlyOperator {
         emit OperatorChanged(operator, _newOperator);
         operator = _newOperator;
+    }
+
+    /**
+     * OPERATOR ONLY: Update the keeper address
+     *
+     * @param _newKeeper           New keeper address
+     */
+    function updateKeeper(address _newKeeper) external onlyOperator {
+        emit KeeperChanged(keeper, _newKeeper);
+        keeper = _newKeeper;
+    }
+
+    /* ============ External Getter Functions ============ */
+
+    /**
+     * @notice Get current status of binary indicator
+     */
+    function getBinaryIndicator() 
+        public
+        view
+        returns (bool)
+    {
+        return binaryIndicator.isBullish();
+    }
+
+    /**
+     * @notice Check if current status of binary indicator is different than last rebalance 
+     */
+    function getBinaryIndicatorIsChanged() 
+        public
+        view
+        returns (bool)
+    {
+        return binaryIndicator.isBullish() != isBullish;
     }
 
     /* ============ Internal Functions ============ */
