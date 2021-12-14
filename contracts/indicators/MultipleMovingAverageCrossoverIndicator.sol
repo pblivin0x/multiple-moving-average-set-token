@@ -27,6 +27,42 @@ import { IUniswapV3Pool } from "@uniswap/v3-core/contracts/interfaces/IUniswapV3
  */
 contract MultipleMovingAverageCrossoverIndicator
 {
+    /* ============ Events ============ */
+
+    /// @notice Emitted when the operator is changed
+    /// @param _oldOperator Address of the old manager
+    /// @param _newOperator Address of the new manager
+    event OperatorChanged(
+        address _oldOperator,
+        address _newOperator
+    );
+
+    /// @notice Emitted when the Uniswap V3 pool is changed
+    /// @param _oldPool Address of the old pool
+    /// @param _newPool Address of the new pool
+    event PoolChanged(
+        IUniswapV3Pool _oldPool,
+        IUniswapV3Pool _newPool
+    );
+
+    /// @notice Emitted when the uncertain condition is changed
+    /// @param _oldUncertainIsBullish Old uncertain condition
+    /// @param _newUncertainIsBullish New uncertain condition
+    event UncertainIsBullishChanged(
+        bool _oldUncertainIsBullish,
+        bool _newUncertainIsBullish
+    );
+
+    /* ============ Modifiers ============ */
+
+    /**
+     * Throws if the sender is not the indicator operator
+     */
+    modifier onlyOperator() {
+        require(msg.sender == operator, "Must be operator");
+        _;
+    }
+
     /* ============ State Variables ============ */
 
     // Address of the Uniswap V3 pool to be used as moving average oracle
@@ -44,6 +80,9 @@ contract MultipleMovingAverageCrossoverIndicator
     // Full list of moving averages time periods: [L1, L2, ..., Lm, S1, S2, ..., Sn, 0]
     uint32[] public movingAverageTimePeriods;
 
+    // Operator can update indicator parameters
+    address public operator;
+
     /* ============ Constructor ============ */
 
     /**
@@ -52,17 +91,20 @@ contract MultipleMovingAverageCrossoverIndicator
      * @param _longTermTimePeriods     Long term moving average time periods in seconds
      * @param _shortTermTimePeriods    Short term moving average time periods in seconds
      * @param _uncertainIsBullish      Boolean to indicate whether indicator uncertain case is bullish or bearish
+     * @param _operator                Address of operator who can update indicator parameters
      */
     constructor(
         IUniswapV3Pool _pool,
         uint32[] memory _longTermTimePeriods,
         uint32[] memory _shortTermTimePeriods,
-        bool _uncertainIsBullish
+        bool _uncertainIsBullish,
+        address _operator
     )
         public 
     {
         pool = _pool;
         uncertainIsBullish = _uncertainIsBullish;
+        operator = _operator;
 
         // Store number of moving averages in each group
         numLongTimePeriods = _longTermTimePeriods.length;
@@ -130,6 +172,36 @@ contract MultipleMovingAverageCrossoverIndicator
         } else {
             return uncertainIsBullish;
         }
+    }
+
+    /**
+     * OPERATOR ONLY: Update the operator address
+     *
+     * @param _newOperator           New operator address
+     */
+    function updateOperator(address _newOperator) external onlyOperator {
+        emit OperatorChanged(operator, _newOperator);
+        operator = _newOperator;
+    }
+
+    /**
+     * OPERATOR ONLY: Update the Uniswap V3 pool to be used as moving average oracle
+     *
+     * @param _newPool           New pool address
+     */
+    function updatePool(IUniswapV3Pool _newPool) external onlyOperator {
+        emit PoolChanged(pool, _newPool);
+        pool = _newPool;
+    }
+
+    /**
+     * OPERATOR ONLY: Update uncertain condition
+     *
+     * @param _newUncertainIsBullish New uncertain condition for indicator     
+     */
+    function updateUncertainIsBullish(bool _newUncertainIsBullish) external onlyOperator {
+        emit UncertainIsBullishChanged(uncertainIsBullish, _newUncertainIsBullish);
+        uncertainIsBullish = _newUncertainIsBullish;
     }
 
     /* ============ Internal Functions ============ */
