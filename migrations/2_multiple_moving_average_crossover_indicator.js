@@ -18,7 +18,7 @@ module.exports = function (deployer) {
     // Whether to consider group overlap as bullish or bearish
     const uncertainIsBullish = false;
 
-    // 
+    // Address of operator who can update indicator parameters
     const operator =  '0xD20673d9c07BaA5400B9DF075C3077DfE75A1a1F';
 
     deployer.deploy(MultipleMovingAverageCrossoverIndicator,
