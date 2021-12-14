@@ -39,15 +39,15 @@ contract BinaryIndicatorManager is MutualUpgrade {
 
     /// @notice Emitted when the methodologist is changed
     /// @param _oldMethodologist Address of the old methodologist
-    /// @param _newMethodologist Address of the new methodologistß
+    /// @param _newMethodologist Address of the new methodologist
     event MethodologistChanged(
         address _oldMethodologist,
         address _newMethodologist
     );
 
     /// @notice Emitted when the operator is changed
-    /// @param _oldOperator Address of the old manager
-    /// @param _newOperator Address of the new manager
+    /// @param _oldOperator Address of the old operator
+    /// @param _newOperator Address of the new operator
     event OperatorChanged(
         address _oldOperator,
         address _newOperator
